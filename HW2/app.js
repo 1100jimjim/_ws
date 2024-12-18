@@ -1,9 +1,9 @@
 import { Application, Router } from "https://deno.land/x/oak/mod.ts";
-import * as render from './render.js';
+import * as render from './render.js'
 
 const posts = [
-  { id: 0, title: 'aaa', body: 'aaaaa', created_at: new Date().toLocaleString() },
-  { id: 1, title: 'bbb', body: 'bbbbb', created_at: new Date().toLocaleString() }
+  {id:0, title:'aaa', body:'aaaaa'},
+  {id:1, title:'bbb', body:'bbbbb'}
 ];
 
 const router = new Router();
@@ -33,20 +33,20 @@ async function show(ctx) {
 }
 
 async function create(ctx) {
-  const body = ctx.request.body();
-  if (body.type === "form") {
-    const pairs = await body.value;
-    const post = {};
+  const body = ctx.request.body
+  if (body.type() === "form") {
+    const pairs = await body.form() // body.value
+    const post = {}
     for (const [key, value] of pairs) {
-      post[key] = value;
+      post[key] = value
     }
-    post.created_at = new Date().toLocaleString(); // 添加发文时间
-    console.log('post=', post);
+    console.log('post=', post)
     const id = posts.push(post) - 1;
+    post.created_at = new Date();
     post.id = id;
     ctx.response.redirect('/');
   }
 }
 
-console.log('Server run at http://127.0.0.1:8000');
+console.log('Server run at http://127.0.0.1:8000')
 await app.listen({ port: 8000 });
