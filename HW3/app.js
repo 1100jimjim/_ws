@@ -1,82 +1,76 @@
-const express = require('express');
-const sqlite3 = require('sqlite3').verbose();
-const bodyParser = require('body-parser');
-const cors = require('cors');
+import { Application, Router, send } from "https://deno.land/x/oak/mod.ts";
+import * as render from './render.js';
+import { DB } from "https://deno.land/x/sqlite/mod.ts";
 
-const app = express();
-const PORT = 3000;
+const db = new DB("blog.db");
+db.query(`
+  CREATE TABLE IF NOT EXISTS posts (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    title TEXT,
+    body TEXT
+  )
+`);
 
-// Middleware
-app.use(bodyParser.json());
-app.use(cors());
+const router = new Router();
 
-const db = new sqlite3.Database('./blog.db', (err) => {
-  if (err) {
-    console.error('Error opening database:', err.message);
-  } else {
-    console.log('Connected to SQLite database.');
-    db.run(`
-      CREATE TABLE IF NOT EXISTS posts (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        title TEXT NOT NULL,
-        content TEXT NOT NULL,
-        category_id INTEGER,
-        FOREIGN KEY (category_id) REFERENCES categories(id)
-      )
-    `);
-    db.run(`
-      CREATE TABLE IF NOT EXISTS categories (
-        id INTEGER PRIMARY KEY AUTOINCREMENT,
-        name TEXT NOT NULL,
-        description TEXT
-      )
-    `);
+router
+  .get("/", list)
+  .get("/post/new", add)
+  .get("/post/:id", show)
+  .post("/post", create);
+
+const app = new Application();
+
+app.use(router.routes());
+app.use(router.allowedMethods());
+
+app.use(async (ctx) => {
+  if (ctx.request.url.pathname.startsWith("/public/")) {
+    await send(ctx, ctx.request.url.pathname, {
+      root: Deno.cwd(),
+    });
   }
 });
 
-app.get('/categories', (req, res) => {
-  db.all('SELECT * FROM categories', [], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
-  });
-});
+function query(sql, params = []) {
+  const list = [];
+  for (const [id, title, body] of db.query(sql, params)) {
+    list.push({ id, title, body });
+  }
+  return list;
+}
 
-app.post('/categories', (req, res) => {
-  const { name, description } = req.body;
-  db.run('INSERT INTO categories (name, description) VALUES (?, ?)', [name, description], function (err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json({ id: this.lastID });
-    }
-  });
-});
+async function list(ctx) {
+  const posts = query("SELECT id, title, body FROM posts");
+  ctx.response.body = render.list(posts);
+}
 
-app.get('/categories/:id/posts', (req, res) => {
-  const categoryId = req.params.id;
-  db.all('SELECT * FROM posts WHERE category_id = ?', [categoryId], (err, rows) => {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json(rows);
-    }
-  });
-});
+async function add(ctx) {
+  ctx.response.body = render.newPost();
+}
 
-app.post('/posts', (req, res) => {
-  const { title, content, category_id } = req.body;
-  db.run('INSERT INTO posts (title, content, category_id) VALUES (?, ?, ?)', [title, content, category_id], function (err) {
-    if (err) {
-      res.status(500).json({ error: err.message });
-    } else {
-      res.json({ id: this.lastID });
-    }
-  });
-});
+async function show(ctx) {
+  const pid = ctx.params.id;
+  const posts = query("SELECT id, title, body FROM posts WHERE id = ?", [pid]);
+  const post = posts[0];
+  if (!post) {
+    ctx.throw(404, "Post not found");
+  }
+  ctx.response.body = render.show(post);
+}
 
-app.listen(PORT, () => {
-  console.log(`Server running on http://localhost:${PORT}`);
-});
+async function create(ctx) {
+  const body = ctx.request.body();
+  if (body.type === "form") {
+    const pairs = await body.value;
+    const post = {};
+    for (const [key, value] of pairs) {
+      post[key] = value;
+    }
+    db.query("INSERT INTO posts (title, body) VALUES (?, ?)", [post.title, post.body]);
+    ctx.response.redirect("/");
+  }
+}
+
+console.log("Server running at http://127.0.0.1:8000");
+await app.listen({ port: 8000 });
