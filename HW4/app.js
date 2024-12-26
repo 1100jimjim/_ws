@@ -1,4 +1,3 @@
-// app.js
 import { Application, Router } from "https://deno.land/x/oak/mod.ts";
 import * as render from "./render.js";
 import { DB } from "https://deno.land/x/sqlite/mod.ts";
