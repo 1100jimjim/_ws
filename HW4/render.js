@@ -1,4 +1,3 @@
-// render.js
 export function layout(title, content) {
   return `
   <html>
